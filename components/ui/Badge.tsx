@@ -34,6 +34,12 @@ const config: Record<RiskLevel, { label: string; bg: string; color: string; bord
     color: "#ff4d6d",
     border: "rgba(255, 77, 109, 0.5)",
   },
+  inconclusive: {
+    label: "Inconclusive",
+    bg: "rgba(168, 162, 158, 0.15)",
+    color: "#a8a29e",
+    border: "rgba(168, 162, 158, 0.35)",
+  },
 };
 
 export default function Badge({ level, size = "md", className = "" }: BadgeProps) {

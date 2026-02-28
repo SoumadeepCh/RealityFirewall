@@ -3,12 +3,13 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Shield, LayoutDashboard, Upload, FileSearch } from "lucide-react";
+import { Shield, LayoutDashboard, Upload, FileSearch, ScrollText } from "lucide-react";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analyze", label: "Analyze", icon: Upload },
   { href: "/results", label: "Results", icon: FileSearch },
+  { href: "/logs", label: "Logs", icon: ScrollText },
 ];
 
 export default function Navbar() {

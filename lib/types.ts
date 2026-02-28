@@ -4,7 +4,7 @@
 
 export type MediaType = "image" | "video" | "audio" | "text";
 
-export type RiskLevel = "low" | "suspicious" | "harmful" | "high_risk";
+export type RiskLevel = "low" | "suspicious" | "harmful" | "high_risk" | "inconclusive";
 
 export interface DetectionSignal {
   id: string;
@@ -25,6 +25,32 @@ export interface MediaItem {
   url: string;
 }
 
+export interface AMAFFeatureVector {
+  hfer: number | null;
+  svd: number | null;
+  pdi: number | null;
+  tiis: number | null;
+  fav: number | null;
+  etk: number | null;
+  pvss: number | null;
+  frd: number | null;
+}
+
+export interface SegmentAuthenticity {
+  segmentIndex: number;
+  startTime: number;
+  endTime: number;
+  authenticityScore: number;
+  flagged: boolean;
+}
+
+export interface ChangePoint {
+  timestamp: number;
+  segmentIndex: number;
+  cusumValue: number;
+  direction: "increase" | "decrease";
+}
+
 export interface AnalysisResult {
   id: string;
   media: MediaItem;
@@ -37,6 +63,12 @@ export interface AnalysisResult {
   metadata: MediaMetadata;
   analyzedAt: string; // ISO date
   processingTimeMs: number;
+  // AMAF extensions
+  featureVector?: AMAFFeatureVector;
+  segments?: SegmentAuthenticity[];
+  changePoints?: ChangePoint[];
+  analysisLevel?: string;
+  earlyExit?: boolean;
 }
 
 export interface MediaMetadata {

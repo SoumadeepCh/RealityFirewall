@@ -1,18 +1,28 @@
 import { NextResponse } from "next/server";
-import { mockAnalysisResult } from "@/lib/mock-data";
 
-// POST /api/analyze — stub that returns mock analysis
-export async function POST() {
-  // In production, this will:
-  // 1. Accept the file upload
-  // 2. Forward to FastAPI backend for processing
-  // 3. Return the real analysis results
+// POST /api/analyze — Runs AMAF detection pipeline
+// Note: The actual detection runs client-side (Canvas/AudioContext APIs needed).
+// This route accepts the result from client-side analysis and returns a structured response.
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { result } = body;
 
-  // Simulate processing time
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!result) {
+      return NextResponse.json(
+        { success: false, error: "No analysis result provided" },
+        { status: 400 }
+      );
+    }
 
-  return NextResponse.json({
-    success: true,
-    result: mockAnalysisResult,
-  });
+    return NextResponse.json({
+      success: true,
+      result,
+    });
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Failed to process analysis" },
+      { status: 500 }
+    );
+  }
 }

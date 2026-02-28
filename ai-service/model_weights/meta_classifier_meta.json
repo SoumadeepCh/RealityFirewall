@@ -1,0 +1,44 @@
+{
+  "feature_keys": [
+    "deepfake_prob",
+    "audio_spoof_prob",
+    "identity_drift",
+    "hfer",
+    "svd",
+    "pdi",
+    "etk",
+    "pvss",
+    "frd",
+    "metadata_score",
+    "noise_score",
+    "spectral_peak_score",
+    "fav",
+    "frame_consistency"
+  ],
+  "metrics": {
+    "auc": 1.0,
+    "accuracy": 0.999,
+    "fpr_at_0.5": 0.002,
+    "n_train": 4000,
+    "n_val": 1000,
+    "n_features": 14,
+    "synthetic_data": true,
+    "feature_importance": {
+      "deepfake_prob": 597,
+      "audio_spoof_prob": 380,
+      "identity_drift": 242,
+      "hfer": 662,
+      "svd": 337,
+      "pdi": 239,
+      "etk": 376,
+      "pvss": 866,
+      "frd": 732,
+      "metadata_score": 840,
+      "noise_score": 806,
+      "spectral_peak_score": 734,
+      "fav": 567,
+      "frame_consistency": 581
+    }
+  },
+  "model_path": "C:\\Users\\SOUMADEEP\\Documents\\realityfirewall\\ai-service\\model_weights\\meta_classifier.lgb"
+}

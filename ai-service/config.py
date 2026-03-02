@@ -32,14 +32,14 @@ MAX_IMAGE_DIM = int(os.getenv("RF_MAX_IMAGE_DIM", "1024"))
 FACE_DETECTION_THRESHOLD = float(os.getenv("RF_FACE_THRESHOLD", "0.9"))
 
 # ---- Scoring Thresholds ----
-# False positive governance: inconclusive zone
-INCONCLUSIVE_LOW = 0.4
-INCONCLUSIVE_HIGH = 0.6
+# False positive governance: wider inconclusive zone for forensic safety
+INCONCLUSIVE_LOW = 0.35
+INCONCLUSIVE_HIGH = 0.65
 
 # Risk level thresholds
-RISK_HIGH_THRESHOLD = 0.8
-RISK_HARMFUL_THRESHOLD = 0.55
-RISK_SUSPICIOUS_THRESHOLD = 0.3
+RISK_HIGH_THRESHOLD = 0.78
+RISK_HARMFUL_THRESHOLD = 0.52
+RISK_SUSPICIOUS_THRESHOLD = 0.28
 
 # ---- Feature Baselines (for z-score normalization) ----
 FEATURE_BASELINES = {
@@ -63,10 +63,16 @@ FEATURE_BASELINES = {
 }
 
 # ---- Platt Scaling Calibration Parameters ----
-# Default values — should be re-calibrated on validation set
+# B=0.0 removes the previously-biasing negative offset that pushed scores low
 PLATT_A = 2.5
-PLATT_B = -1.0
+PLATT_B = 0.0
+
+# ---- Signal confidence boost ----
+# When forensic signals fire above this threshold, blend into final probability
+SIGNAL_BOOST_WEIGHT = 0.35   # fraction of final score from signal confidence
+SIGNAL_BOOST_THRESHOLD = 0.4  # minimum signal confidence to trigger boost
 
 # ---- Logging ----
 LOG_ANALYSIS = True
 LOG_FILE = LOGS_DIR / "analysis_log.jsonl"
+

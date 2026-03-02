@@ -4,7 +4,7 @@ Request/response models for the API.
 """
 from __future__ import annotations
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
 class FeatureVector(BaseModel):
@@ -80,6 +80,24 @@ class MetadataEvidence(BaseModel):
     creation_date: Optional[str] = None
 
 
+class SocietalImpact(BaseModel):
+    """Societal harm potential estimates."""
+    polarization_potential: float = Field(ge=0, le=1, default=0.0)
+    panic_potential: float = Field(ge=0, le=1, default=0.0)
+    reputation_damage_likelihood: float = Field(ge=0, le=1, default=0.0)
+
+
+class ViralityAnalysis(BaseModel):
+    """Phase 6: Virality & misinformation risk assessment."""
+    virality_score: float = Field(ge=0, le=100, default=0.0)
+    misinformation_risk: str = "low"  # low, suspicious, harmful, high_risk
+    misinformation_risk_score: float = Field(ge=0, le=1, default=0.0)
+    emotional_polarity: float = Field(ge=-1, le=1, default=0.0)  # -1=calm, 1=alarming
+    political_sensitivity: float = Field(ge=0, le=1, default=0.0)
+    societal_impact: SocietalImpact = SocietalImpact()
+    risk_factors: List[str] = []
+
+
 class AnalysisResponse(BaseModel):
     """Full analysis result returned by the API."""
     id: str
@@ -95,6 +113,7 @@ class AnalysisResponse(BaseModel):
     feature_vector: FeatureVector
     signals: list[DetectionSignal] = []
     explanation: str = ""
+    llm_explanation: Optional[str] = None  # Phase 4: LLM-generated rich reasoning
     manipulation_type: Optional[str] = None
 
     metadata_evidence: MetadataEvidence = MetadataEvidence()
@@ -103,6 +122,9 @@ class AnalysisResponse(BaseModel):
     segments: list[SegmentAuthenticity] = []
     change_points: list[ChangePoint] = []
 
+    # Phase 6: Virality & risk
+    virality_analysis: Optional[ViralityAnalysis] = None
+
     processing_time_ms: int = 0
     model_versions: dict[str, str] = {}
 
@@ -110,6 +132,6 @@ class AnalysisResponse(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response."""
     status: str = "ok"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     models_loaded: list[str] = []
     device: str = "cpu"

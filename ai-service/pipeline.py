@@ -21,6 +21,8 @@ from models.deepfake_classifier import predict_deepfake, get_model_info
 from models.audio_spoof_detector import predict_spoof as predict_audio_spoof
 from ensemble.scoring import score_analysis
 from logging_service import log_analysis, compute_media_hash
+from virality import analyze_virality
+from llm_explanation import generate_llm_explanation, generate_llm_explanation_sync
 from schemas import (
     AnalysisResponse,
     FeatureVector,
@@ -254,6 +256,25 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
 
     processing_time_ms = int((time.perf_counter() - start_time) * 1000)
 
+    # ---- Step 5: Phase 6 — Virality & Risk Analysis ----
+    virality_result = analyze_virality(
+        fake_probability=scoring_result["fake_probability"],
+        media_type=media_type,
+        risk_level=scoring_result["risk_level"],
+        signals=signals,
+    )
+
+    # ---- Step 6: Phase 4 — LLM Explanation ----
+    llm_explanation = generate_llm_explanation_sync(
+        media_type=media_type,
+        fake_probability=scoring_result["fake_probability"],
+        verdict=scoring_result["verdict"],
+        signals=signals,
+        manipulation_type=_determine_manipulation_type(signals, feature_dict),
+        virality_score=virality_result.virality_score,
+        misinfo_risk=virality_result.misinformation_risk,
+    )
+
     # ---- Step 5: Assemble response ----
     # Build FeatureVector
     fv = FeatureVector(
@@ -341,10 +362,12 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         feature_vector=fv,
         signals=detection_signals,
         explanation=scoring_result["explanation"],
+        llm_explanation=llm_explanation,
         manipulation_type=manipulation_type,
         metadata_evidence=metadata_evidence,
         segments=segments,
         change_points=change_points,
+        virality_analysis=virality_result,
         processing_time_ms=processing_time_ms,
         model_versions=model_versions,
     )

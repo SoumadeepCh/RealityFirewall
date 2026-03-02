@@ -14,12 +14,16 @@ import {
   BarChart3,
   Shield,
   Zap,
+  Microscope,
+  Sparkles,
 } from "lucide-react";
 import Navbar from "@/components/ui/Navbar";
 import Card, { CardHeader } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import AuthenticityMeter from "@/components/ui/AuthenticityMeter";
 import RiskMeter from "@/components/ui/RiskMeter";
+import HeatmapPanel from "@/components/ui/HeatmapPanel";
+import VitalityCard from "@/components/ui/VitalityCard";
 import { mockAnalysisResult } from "@/lib/mock-data";
 import type { AnalysisResult, DetectionSignal, AMAFFeatureVector, SegmentAuthenticity } from "@/lib/types";
 
@@ -136,7 +140,6 @@ function FeatureVectorPanel({ vector }: { vector: AMAFFeatureVector }) {
       >
         {entries.map(([key, value]) => {
           const info = FEATURE_LABELS[key] || { name: key, fullName: key, color: "#8888a0" };
-          // Normalize for bar display (cap at reasonable ranges)
           const barWidth = Math.min(100, Math.max(5, value * (key === "pvss" ? 0.5 : key === "etk" ? 5 : 100)));
 
           return (
@@ -332,17 +335,15 @@ export default function ResultsPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   useEffect(() => {
-    // Try to load from sessionStorage first (real analysis)
     const stored = sessionStorage.getItem("lastAnalysis");
     if (stored) {
       try {
         setResult(JSON.parse(stored));
         return;
       } catch {
-        // Fall through to mock
+        // fall through
       }
     }
-    // Fallback to mock data
     setResult(mockAnalysisResult);
   }, []);
 
@@ -355,6 +356,8 @@ export default function ResultsPage() {
       ? "Level 2 — Deep Spatial"
       : "Level 3 — Temporal + Cross-Modal"
     : null;
+
+  const displayExplanation = result.llmExplanation || result.explanation;
 
   return (
     <>
@@ -418,6 +421,24 @@ export default function ResultsPage() {
                 }}
               >
                 <Zap size={10} /> Early Exit
+              </span>
+            )}
+            {/* Phase 4: Phase indicator */}
+            {result.llmExplanation && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: "#7b61ff",
+                  background: "rgba(123,97,255,0.1)",
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <Sparkles size={10} /> AI Reasoning
               </span>
             )}
           </div>
@@ -515,6 +536,17 @@ export default function ResultsPage() {
           </Card>
         </div>
 
+        {/* Phase 4: Frequency Anomaly Heatmap */}
+        {result.featureVector && (result.featureVector.hfer !== null || result.featureVector.svd !== null) && (
+          <div style={{ marginBottom: "24px" }}>
+            <HeatmapPanel
+              vector={result.featureVector}
+              fakeProbability={result.fakeProbability}
+              mediaType={result.media.mediaType}
+            />
+          </div>
+        )}
+
         {/* AMAF Feature Vector */}
         {result.featureVector && (
           <div style={{ marginBottom: "24px" }}>
@@ -529,7 +561,7 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Two-column: Signals + Explanation */}
+        {/* Two-column: Signals + AI Explanation */}
         <div
           style={{
             display: "grid",
@@ -561,7 +593,7 @@ export default function ResultsPage() {
             </div>
           </Card>
 
-          {/* AI Explanation */}
+          {/* Phase 4: LLM/Rule-based Explanation */}
           <Card padding="lg">
             <CardHeader>
               <h2
@@ -574,8 +606,23 @@ export default function ResultsPage() {
                 }}
               >
                 <Brain size={18} color="#7b61ff" />
-                AI Explanation
+                {result.llmExplanation ? "AI Forensic Analysis" : "AI Explanation"}
               </h2>
+              {result.llmExplanation && (
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: "10px",
+                    color: "#7b61ff",
+                    background: "rgba(123,97,255,0.1)",
+                    padding: "2px 8px",
+                    borderRadius: "6px",
+                    fontWeight: 600,
+                  }}
+                >
+                  PHASE 4
+                </span>
+              )}
             </CardHeader>
             <p
               style={{
@@ -584,13 +631,20 @@ export default function ResultsPage() {
                 lineHeight: 1.75,
               }}
             >
-              {result.explanation}
+              {displayExplanation}
             </p>
           </Card>
         </div>
 
+        {/* Phase 6: Virality & Risk */}
+        {result.viralityAnalysis && (
+          <div style={{ marginBottom: "24px" }}>
+            <VitalityCard data={result.viralityAnalysis} />
+          </div>
+        )}
+
         {/* Evidence / Metadata */}
-        <Card padding="lg">
+        <Card padding="lg" style={{ marginBottom: "24px" }}>
           <CardHeader>
             <h2
               style={{
@@ -674,6 +728,49 @@ export default function ResultsPage() {
             ))}
           </div>
         </Card>
+
+        {/* Phase 7: Investigation Mode CTA */}
+        <div
+          style={{
+            padding: "24px 28px",
+            borderRadius: "16px",
+            background: "linear-gradient(135deg, rgba(123,97,255,0.08), rgba(6,214,160,0.06))",
+            border: "1px solid rgba(123,97,255,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "16px",
+          }}
+        >
+          <div>
+            <p style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px" }}>
+              Need deeper analysis?
+            </p>
+            <p style={{ fontSize: "13px", color: "#8888a0" }}>
+              Explore frame-by-frame breakdown, evidence accordion, and analyst tools in Investigation Mode.
+            </p>
+          </div>
+          <Link
+            href="/investigation"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "12px 24px",
+              borderRadius: "12px",
+              background: "linear-gradient(135deg, #7b61ff, #06d6a0)",
+              color: "#050510",
+              textDecoration: "none",
+              fontSize: "14px",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <Microscope size={16} />
+            Open Investigation Mode
+          </Link>
+        </div>
       </main>
     </>
   );

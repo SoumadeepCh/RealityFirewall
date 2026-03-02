@@ -121,6 +121,7 @@ export default function AnalyzePage() {
         riskScore: apiResult.risk_score,
         signals,
         explanation: apiResult.explanation || "",
+        llmExplanation: apiResult.llm_explanation || undefined,
         manipulationType: apiResult.manipulation_type,
         metadata: {
           exifPresent: apiResult.metadata_evidence?.exif_present ?? true,
@@ -163,7 +164,24 @@ export default function AnalyzePage() {
         ),
         analysisLevel: apiResult.analysis_level,
         earlyExit: apiResult.early_exit,
+        // Phase 6: Virality Analysis
+        viralityAnalysis: apiResult.virality_analysis
+          ? {
+              viralityScore: apiResult.virality_analysis.virality_score,
+              misinformationRisk: apiResult.virality_analysis.misinformation_risk,
+              misinformationRiskScore: apiResult.virality_analysis.misinformation_risk_score,
+              emotionalPolarity: apiResult.virality_analysis.emotional_polarity,
+              politicalSensitivity: apiResult.virality_analysis.political_sensitivity,
+              societalImpact: {
+                polarizationPotential: apiResult.virality_analysis.societal_impact?.polarization_potential ?? 0,
+                panicPotential: apiResult.virality_analysis.societal_impact?.panic_potential ?? 0,
+                reputationDamageLikelihood: apiResult.virality_analysis.societal_impact?.reputation_damage_likelihood ?? 0,
+              },
+              riskFactors: apiResult.virality_analysis.risk_factors || [],
+            }
+          : undefined,
       };
+
 
       // Store result for the results page
       sessionStorage.setItem("lastAnalysis", JSON.stringify(result));

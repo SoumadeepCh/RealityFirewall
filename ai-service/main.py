@@ -5,18 +5,42 @@ FastAPI application for forensic-grade media authenticity detection.
 Run with:
     uvicorn main:app --reload --port 8000
 """
+import hashlib
 import logging
 import sys
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import CORS_ORIGINS, HOST, PORT
 from schemas import AnalysisResponse, HealthResponse
 from pipeline import run_pipeline
 from logging_service import get_log_stats, get_log_entries
+
+# ---- Phase 9: In-memory fingerprint cache (LRU, max 500 entries) ----
+_CACHE_MAX = 500
+_fingerprint_cache: OrderedDict[str, Any] = OrderedDict()
+
+
+def _cache_get(sha256: str):
+    if sha256 in _fingerprint_cache:
+        _fingerprint_cache.move_to_end(sha256)  # LRU update
+        return _fingerprint_cache[sha256]
+    return None
+
+
+def _cache_put(sha256: str, result: Any):
+    if sha256 in _fingerprint_cache:
+        _fingerprint_cache.move_to_end(sha256)
+    else:
+        if len(_fingerprint_cache) >= _CACHE_MAX:
+            _fingerprint_cache.popitem(last=False)  # evict oldest
+        _fingerprint_cache[sha256] = result
 
 # ---- Logging Setup ----
 logging.basicConfig(
@@ -134,7 +158,16 @@ async def analyze_media(file: UploadFile = File(...)):
         if len(raw_bytes) > 100 * 1024 * 1024:  # 100MB limit
             raise HTTPException(status_code=413, detail="File too large (max 100MB)")
 
+        # Phase 9: check fingerprint cache before running full pipeline
+        sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        cached = _cache_get(sha256)
+        if cached is not None:
+            elapsed = time.perf_counter() - start
+            logger.info(f"Cache hit for {file.filename} ({sha256[:8]}…) in {elapsed:.3f}s")
+            return cached
+
         result = run_pipeline(raw_bytes, file.filename, file.content_type)
+        _cache_put(sha256, result)
 
         elapsed = time.perf_counter() - start
         logger.info(
@@ -169,6 +202,38 @@ async def get_logs(limit: int = 100, offset: int = 0):
         "limit": limit,
         "offset": offset,
     }
+
+
+@app.post("/retrain")
+async def retrain_meta_classifier(n_samples: int = 5000):
+    """
+    Trigger meta-classifier retraining with improved synthetic distributions.
+    This deletes the old model and trains a fresh one with better calibration.
+    """
+    logger.info(f"Retraining meta-classifier with {n_samples} synthetic samples...")
+    try:
+        from ensemble.meta_classifier import train_model
+        metrics = train_model(n_synthetic=n_samples)
+        # Clear fingerprint cache so re-analyses use new model
+        _fingerprint_cache.clear()
+        logger.info(f"Retrain complete: {metrics}")
+        return {"status": "ok", "metrics": metrics}
+    except Exception as e:
+        logger.error(f"Retrain failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Retrain failed: {str(e)}")
+
+
+@app.get("/cache/stats")
+async def cache_stats():
+    """Return fingerprint cache stats (Phase 9)."""
+    return {"cached_entries": len(_fingerprint_cache), "max_capacity": _CACHE_MAX}
+
+
+@app.delete("/cache")
+async def clear_cache():
+    """Clear the fingerprint cache."""
+    _fingerprint_cache.clear()
+    return {"status": "cleared"}
 
 
 # ---- Main Entry ----

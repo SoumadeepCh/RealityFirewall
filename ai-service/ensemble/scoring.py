@@ -13,7 +13,10 @@ from config import (
     RISK_SUSPICIOUS_THRESHOLD,
     INCONCLUSIVE_LOW,
     INCONCLUSIVE_HIGH,
+    SIGNAL_BOOST_WEIGHT,
+    SIGNAL_BOOST_THRESHOLD,
 )
+
 
 
 def normalize_feature(key: str, value: float) -> float:
@@ -157,6 +160,35 @@ def generate_explanation(
     return " ".join(parts)
 
 
+def apply_signal_boost(base_probability: float, signals: list[dict]) -> float:
+    """
+    Blend high-confidence forensic signal scores into the final probability.
+
+    This prevents the meta-classifier from silently ignoring strong forensic
+    evidence just because it learned the overall feature profile is "real-like".
+
+    Only boosts if the average confidence of triggered signals exceeds SIGNAL_BOOST_THRESHOLD.
+    Uses a weighted average: (1 - SIGNAL_BOOST_WEIGHT) * base + SIGNAL_BOOST_WEIGHT * signal_avg
+    """
+    if not signals:
+        return base_probability
+
+    # Gather confidences of signals above threshold
+    high_conf = [
+        s["confidence"]
+        for s in signals
+        if s.get("confidence", 0.0) >= SIGNAL_BOOST_THRESHOLD
+    ]
+
+    if not high_conf:
+        return base_probability
+
+    signal_avg = sum(high_conf) / len(high_conf)
+    # Weighted blend
+    boosted = (1.0 - SIGNAL_BOOST_WEIGHT) * base_probability + SIGNAL_BOOST_WEIGHT * signal_avg
+    return min(1.0, max(0.0, boosted))
+
+
 def score_analysis(
     feature_vector: dict[str, Optional[float]],
     signals: list[dict],
@@ -167,11 +199,14 @@ def score_analysis(
 
     Phase 5: Uses trained LightGBM meta-classifier if available.
     Fallback: weighted ensemble + Platt scaling.
+    After scoring: apply signal confidence boost.
 
     Returns:
         dict with raw_score, fake_probability, risk_level, risk_score, verdict, explanation
     """
     scoring_method = "weighted_ensemble"
+    raw_score = 0.0
+    fake_probability = 0.0
 
     # Phase 5: Try meta-classifier first
     try:
@@ -191,6 +226,9 @@ def score_analysis(
         raw_score = compute_ensemble_score(feature_vector)
         fake_probability = platt_scale(raw_score)
 
+    # Apply signal confidence boost — blends strongly-fired signals into score
+    fake_probability = apply_signal_boost(fake_probability, signals)
+
     risk = classify_risk(fake_probability)
 
     explanation = generate_explanation(
@@ -208,3 +246,4 @@ def score_analysis(
         **risk,
         "explanation": explanation,
     }
+

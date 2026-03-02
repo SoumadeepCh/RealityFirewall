@@ -110,15 +110,15 @@ def predict(feature_dict: dict) -> Optional[float]:
         return None
 
 
-def generate_synthetic_dataset(n_samples: int = 2000, seed: int = 42) -> tuple:
+def generate_synthetic_dataset(n_samples: int = 5000, seed: int = 42) -> tuple:
     """
-    Generate synthetic training data using known feature distributions.
+    Generate synthetic training data with realistic, overlapping distributions.
 
-    Real samples: drawn from "natural" distributions.
-    Fake samples: drawn from "manipulated" distributions.
-
-    This is a bootstrap approach — should be replaced with real labeled data
-    from FaceForensics++, Celeb-DF, ASVspoof when available.
+    Key fix vs. previous version:
+    - Real and fake distributions OVERLAP significantly (both within 0-1 range)
+    - Fake data is not trivially separable — model must learn feature COMBINATIONS
+    - Added per-sample noise to avoid overfit
+    - Bootstrap approach: replace with FaceForensics++/Celeb-DF data when available
 
     Returns:
         (X, y) where X is (n_samples, n_features) and y is (n_samples,) binary labels
@@ -127,49 +127,51 @@ def generate_synthetic_dataset(n_samples: int = 2000, seed: int = 42) -> tuple:
     n_real = n_samples // 2
     n_fake = n_samples - n_real
 
-    # ---- Real samples distribution ----
+    # ---- Real samples: naturally low forensic scores, some noise ----
     real = np.column_stack([
-        rng.beta(2, 5, n_real),           # deepfake_prob: low (mostly real)
-        rng.beta(2, 5, n_real),           # audio_spoof_prob: low
-        rng.exponential(0.005, n_real),   # identity_drift: very low
-        rng.normal(0.25, 0.05, n_real),   # hfer: around 0.25 (natural)
-        rng.normal(0.15, 0.08, n_real),   # svd: around 0.15 (natural)
-        rng.exponential(0.005, n_real),   # pdi: very low
-        rng.normal(3.0, 1.5, n_real),     # etk: around 3.0
-        rng.normal(50.0, 20.0, n_real),   # pvss: around 50 (natural variation)
-        rng.normal(0.1, 0.05, n_real),    # frd: around 0.1
+        rng.beta(2, 6, n_real),           # deepfake_prob: low (0.15-0.30 typical)
+        rng.beta(2, 6, n_real),           # audio_spoof_prob: low
+        rng.beta(1.5, 15, n_real),        # identity_drift: very low
+        rng.beta(5, 3, n_real),           # hfer: higher (real preserves hi-freq)
+        rng.beta(2, 6, n_real),           # svd: lower spectral variance
+        rng.beta(1.5, 12, n_real),        # pdi: very low patch drift
+        rng.beta(3, 5, n_real),           # etk: moderate energy transitions
+        rng.beta(5, 3, n_real),           # pvss: higher pitch consistency (real voice)
+        rng.beta(2, 7, n_real),           # frd: low spectral flatness deviation
         rng.beta(2, 8, n_real),           # metadata_score: mostly low
-        rng.beta(2, 8, n_real),           # noise_score: low for real
-        rng.beta(1.5, 10, n_real),        # spectral_peak_score: very low for real
-        rng.beta(2, 8, n_real),           # fav: low for real video
-        rng.beta(1.5, 10, n_real),        # frame_consistency: very low for real
+        rng.beta(2, 8, n_real),           # noise_score: low for real (consistent noise)
+        rng.beta(1.5, 8, n_real),         # spectral_peak_score: low for real
+        rng.beta(2, 8, n_real),           # fav: low optical flow variance for real
+        rng.beta(1.5, 10, n_real),        # frame_consistency: low for real
     ])
 
-    # ---- Fake samples distribution ----
+    # ---- Fake samples: elevated forensic scores but overlapping with real ----
     fake = np.column_stack([
-        rng.beta(5, 2, n_fake),           # deepfake_prob: high (mostly fake)
-        rng.beta(4, 3, n_fake),           # audio_spoof_prob: elevated
-        rng.exponential(0.03, n_fake),    # identity_drift: higher
-        rng.normal(0.12, 0.06, n_fake),   # hfer: lower (GAN suppression)
-        rng.normal(0.35, 0.15, n_fake),   # svd: higher variance
-        rng.exponential(0.02, n_fake),    # pdi: higher
-        rng.normal(8.0, 4.0, n_fake),     # etk: higher (sharp transitions)
-        rng.normal(10.0, 8.0, n_fake),    # pvss: lower (over-smooth)
-        rng.normal(0.35, 0.15, n_fake),   # frd: higher
-        rng.beta(5, 3, n_fake),           # metadata_score: elevated
-        rng.beta(5, 3, n_fake),           # noise_score: elevated for fake
+        rng.beta(5, 3, n_fake),           # deepfake_prob: higher (0.50-0.75)
+        rng.beta(4, 4, n_fake),           # audio_spoof_prob: moderate-high
+        rng.beta(4, 6, n_fake),           # identity_drift: elevated but overlaps
+        rng.beta(2, 5, n_fake),           # hfer: lower (GAN suppresses hi-freq)
+        rng.beta(5, 3, n_fake),           # svd: higher spectral variance
+        rng.beta(4, 6, n_fake),           # pdi: elevated patch drift
+        rng.beta(5, 3, n_fake),           # etk: higher energy transitions (artifacts)
+        rng.beta(2, 5, n_fake),           # pvss: lower pitch consistency (TTS artifacts)
+        rng.beta(5, 3, n_fake),           # frd: higher spectral flatness dev.
+        rng.beta(4, 4, n_fake),           # metadata_score: elevated
+        rng.beta(5, 3, n_fake),           # noise_score: elevated for GAN
         rng.beta(4, 4, n_fake),           # spectral_peak_score: moderate-high
-        rng.beta(4, 3, n_fake),           # fav: elevated for deepfake video
-        rng.beta(3, 3, n_fake),           # frame_consistency: moderate (varies per frame)
+        rng.beta(4, 4, n_fake),           # fav: elevated for deepfake video
+        rng.beta(4, 4, n_fake),           # frame_consistency: elevated variation
     ])
 
-    # Clip to valid ranges
-    real = np.clip(real, 0, None)
-    fake = np.clip(fake, 0, None)
+    # Add realistic noise (±5%) to all samples to prevent overfit
+    noise = rng.normal(0, 0.05, real.shape)
+    real = np.clip(real + noise[:n_real], 0.0, 1.0)
+    noise = rng.normal(0, 0.05, fake.shape)
+    fake = np.clip(fake + noise[:n_fake], 0.0, 1.0)
 
-    # Randomly set some values to -1 (missing) — 10% chance per feature
+    # Randomly set some values to -1 (missing) — 15% chance per feature
     for data in [real, fake]:
-        mask = rng.random(data.shape) < 0.10
+        mask = rng.random(data.shape) < 0.15
         data[mask] = -1.0
 
     X = np.vstack([real, fake])
@@ -181,6 +183,7 @@ def generate_synthetic_dataset(n_samples: int = 2000, seed: int = 42) -> tuple:
     y = y[perm]
 
     return X, y
+
 
 
 def train_model(
@@ -223,16 +226,19 @@ def train_model(
     logger.info(f"Training: {X_train.shape[0]} samples, Validation: {X_val.shape[0]} samples")
     logger.info(f"Features: {FEATURE_KEYS}")
 
-    # LightGBM parameters
+    # LightGBM parameters — regularized to prevent overfit on synthetic data
     params = {
         "objective": "binary",
         "metric": "binary_logloss",
         "boosting_type": "gbdt",
-        "num_leaves": 31,
+        "num_leaves": 15,           # reduced from 31 to limit complexity
         "learning_rate": 0.05,
-        "feature_fraction": 0.8,
-        "bagging_fraction": 0.8,
-        "bagging_freq": 5,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 3,
+        "min_child_samples": 20,    # regularization: min samples per leaf
+        "lambda_l1": 0.1,           # L1 regularization
+        "lambda_l2": 0.1,           # L2 regularization
         "verbose": -1,
         "n_jobs": -1,
         "seed": 42,
@@ -241,13 +247,14 @@ def train_model(
     train_data = lgb.Dataset(X_train, label=y_train, feature_name=FEATURE_KEYS)
     val_data = lgb.Dataset(X_val, label=y_val, reference=train_data, feature_name=FEATURE_KEYS)
 
-    # Train
+    # Train — 80 rounds: enough to learn patterns, not enough to overfit synthetic data
     model = lgb.train(
         params,
         train_data,
-        num_boost_round=300,
+        num_boost_round=80,
         valid_sets=[val_data],
     )
+
 
     # Evaluate
     y_pred = model.predict(X_val)

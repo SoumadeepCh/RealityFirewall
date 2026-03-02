@@ -51,6 +51,22 @@ export interface ChangePoint {
   direction: "increase" | "decrease";
 }
 
+export interface SocietalImpact {
+  polarizationPotential: number;
+  panicPotential: number;
+  reputationDamageLikelihood: number;
+}
+
+export interface ViralityAnalysis {
+  viralityScore: number; // 0 - 100
+  misinformationRisk: RiskLevel;
+  misinformationRiskScore: number; // 0 - 1
+  emotionalPolarity: number; // -1 to 1
+  politicalSensitivity: number; // 0 - 1
+  societalImpact: SocietalImpact;
+  riskFactors: string[];
+}
+
 export interface AnalysisResult {
   id: string;
   media: MediaItem;
@@ -59,6 +75,7 @@ export interface AnalysisResult {
   riskScore: number; // 0 - 100
   signals: DetectionSignal[];
   explanation: string;
+  llmExplanation?: string;   // Phase 4: rich LLM-generated reasoning
   manipulationType?: string;
   metadata: MediaMetadata;
   analyzedAt: string; // ISO date
@@ -69,7 +86,10 @@ export interface AnalysisResult {
   changePoints?: ChangePoint[];
   analysisLevel?: string;
   earlyExit?: boolean;
+  // Phase 6: Virality & Risk
+  viralityAnalysis?: ViralityAnalysis;
 }
+
 
 export interface MediaMetadata {
   exifPresent: boolean;

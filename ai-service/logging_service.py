@@ -63,6 +63,19 @@ def log_analysis(
         # Future: user_feedback field for correction logging
     }
 
+    # Phase 14: Also attempt MongoDB write (non-blocking best-effort)
+    try:
+        import asyncio
+        from storage import store_analysis_record
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Schedule as background fire-and-forget in async context
+            asyncio.ensure_future(store_analysis_record(record))
+        else:
+            loop.run_until_complete(store_analysis_record(record))
+    except Exception as e:
+        logger.debug(f"MongoDB dual-write skipped: {e}")
+
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG_FILE, "a", encoding="utf-8") as f:

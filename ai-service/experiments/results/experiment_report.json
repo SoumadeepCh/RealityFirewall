@@ -1,0 +1,57 @@
+{
+  "experiment": "AMAF Pipeline Feasibility Test",
+  "timestamp": "2026-03-12T14:16:02.803551",
+  "datasets_used": [
+    "Celeb-DF-v2",
+    "FF++"
+  ],
+  "timing": {
+    "total_videos": 400,
+    "successful_extractions": 383,
+    "failed_extractions": 17,
+    "total_extraction_time_s": 3204.26,
+    "mean_time_per_video_s": 8.011,
+    "median_time_per_video_s": 6.568,
+    "min_time_per_video_s": 0.0,
+    "max_time_per_video_s": 20.531,
+    "std_time_per_video_s": 4.65,
+    "p95_time_per_video_s": 17.237
+  },
+  "model_metrics": {
+    "auc_roc": 0.652,
+    "accuracy": 0.6364,
+    "precision": 0.6154,
+    "recall": 0.6486,
+    "f1_score": 0.6316,
+    "confusion_matrix": [
+      [
+        25,
+        15
+      ],
+      [
+        13,
+        24
+      ]
+    ],
+    "train_samples": 306,
+    "test_samples": 77,
+    "train_time_s": 0.066,
+    "feature_importance": {
+      "deepfake_prob": 0,
+      "audio_spoof_prob": 0,
+      "identity_drift": 125,
+      "hfer": 189,
+      "svd": 194,
+      "pdi": 0,
+      "etk": 0,
+      "pvss": 0,
+      "frd": 0,
+      "metadata_score": 0,
+      "noise_score": 10,
+      "spectral_peak_score": 190,
+      "fav": 87,
+      "frame_consistency": 0
+    }
+  },
+  "classification_report": "              precision    recall  f1-score   support\n\n        REAL       0.66      0.62      0.64        40\n        FAKE       0.62      0.65      0.63        37\n\n    accuracy                           0.64        77\n   macro avg       0.64      0.64      0.64        77\nweighted avg       0.64      0.64      0.64        77\n"
+}

@@ -23,6 +23,8 @@ from ensemble.scoring import score_analysis
 from logging_service import log_analysis, compute_media_hash
 from virality import analyze_virality
 from llm_explanation import generate_llm_explanation, generate_llm_explanation_sync
+from feature_extractors.origin import search_origin_timeline
+from feature_extractors.gradcam import generate_gradcam
 from schemas import (
     AnalysisResponse,
     FeatureVector,
@@ -106,6 +108,7 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         all_face_crops = []
         per_frame_probs = []
         df_result_available = False
+        
         for i, frame in enumerate(frames[:10]):  # Sample first 10 frames
             faces = crop_faces_for_classification(frame)
             if faces:
@@ -114,17 +117,18 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
                 all_face_crops.append(largest["face_tensor_ready"])
 
                 # Classify first detected face
-                if i == 0:
+                if not df_result_available:
                     df_result = predict_deepfake(largest["face_tensor_ready"])
                     if df_result["model_available"]:
-                        per_frame_probs.append(df_result["deepfake_prob"])
+                        if df_result.get("deepfake_prob") is not None:
+                            per_frame_probs.append(df_result["deepfake_prob"])
                         signals.extend(df_result["signals"])
                         model_versions["deepfake_classifier"] = "efficientnet_b4_imagenet"
                         df_result_available = True
-                elif df_result_available:
+                else:
                     # Improvement 2: Multi-frame classification
                     df_result_n = predict_deepfake(largest["face_tensor_ready"])
-                    if df_result_n["model_available"] and df_result_n["deepfake_prob"] is not None:
+                    if df_result_n["model_available"] and df_result_n.get("deepfake_prob") is not None:
                         per_frame_probs.append(df_result_n["deepfake_prob"])
 
         # Improvement 2: Aggregate multi-frame deepfake probabilities
@@ -216,20 +220,65 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         feature_dict["svd"] = freq["svd"]
         feature_dict["spectral_peak_score"] = freq.get("spectral_peak_score")
         signals.extend(freq["signals"])
+        
+        # Texture consistency — average across 3 sampled frames
+        # (first-frame only was often a near-static intro → PDI ≈ 0)
+        _tex_frames = [media["frames"][i] for i in [
+            0,
+            len(media["frames"]) // 2,
+            len(media["frames"]) - 1,
+        ] if i < len(media["frames"])]
+        _pdi_vals = [compute_texture_metrics(f)["pdi"] for f in _tex_frames]
+        feature_dict["pdi"] = float(np.median(_pdi_vals))
+        for _tv in [compute_texture_metrics(f) for f in _tex_frames]:
+            signals.extend(_tv["signals"])
 
-        # Noise analysis on first frame
-        import numpy as np
-        first_arr = np.array(first_frame.convert("RGB"))
-        noise_result = analyze_noise(first_arr)
-        if noise_result["noise_score"] is not None:
-            feature_dict["noise_score"] = noise_result["noise_score"]
-            signals.extend(noise_result["signals"])
+        # Skip metadata for video — encoded H.264 strips all EXIF,
+        # so metadata_score would be 0.0 for every sample (constant → zero importance).
+        # Leave feature_dict["metadata_score"] = None → written as -1 sentinel.
+
+        # Noise analysis — average across 3 sampled frames with relaxed thresholds
+        _noise_scores = []
+        for _nf in _tex_frames:
+            _nr = analyze_noise(np.array(_nf.convert("RGB")), video_mode=True)
+            if _nr["noise_score"] is not None:
+                _noise_scores.append(_nr["noise_score"])
+                signals.extend(_nr["signals"])
+        if _noise_scores:
+            feature_dict["noise_score"] = float(np.median(_noise_scores))
 
         # Improvement 5: Optical flow
         flow_result = compute_flow_metrics(media["frames"])
         if flow_result["fav"] is not None:
             feature_dict["fav"] = flow_result["fav"]
             signals.extend(flow_result["signals"])
+            
+        # Extract audio features if we managed to multiplex it from the video
+        if media.get("audio_samples") is not None:
+            sr = media.get("sr", 22050)
+            samples = media["audio_samples"]
+
+            # Silence guard: videos with an empty/silent audio track should be treated
+            # identically to videos with no audio track (features → -1 sentinel).
+            _rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2))) if len(samples) else 0.0
+            if _rms < 0.001:
+                logger.info("Audio track present but silent (RMS < 0.001) — skipping audio analysis")
+            else:
+                # Heuristic audio analysis
+                audio_result = analyze_audio(samples, sr)
+                if audio_result:
+                    feature_dict["etk"] = audio_result.get("etk")
+                    feature_dict["pvss"] = audio_result.get("pvss")
+                    feature_dict["frd"] = audio_result.get("frd")
+                    signals.extend(audio_result.get("signals", []))
+
+                # Pretrained audio spoof model
+                spoof_result = predict_audio_spoof(samples, sr)
+                if spoof_result and spoof_result.get("audio_spoof_prob") is not None:
+                    feature_dict["audio_spoof_prob"] = spoof_result["audio_spoof_prob"]
+                    signals.extend(spoof_result.get("signals", []))
+                    model_versions["audio_spoof"] = spoof_result.get("model_used", "mfcc_feature_analysis")
+
 
     elif media_type == "audio" and media.get("samples") is not None:
         sr = media.get("sr", 22050)
@@ -275,7 +324,19 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         misinfo_risk=virality_result.misinformation_risk,
     )
 
-    # ---- Step 5: Assemble response ----
+    # ---- Step 7: Phase 12 — Timeline & Origin Tracking ----
+    origin_result = None
+    # For now, we only support reverse image search for static images or first frames of videos
+    if media_type == "image":
+        origin_result = search_origin_timeline(raw_bytes, filename)
+    elif media_type == "video" and "frames" in media and len(media["frames"]) > 0:
+        # Extract bytes from first frame for reverse search
+        import io
+        buf = io.BytesIO()
+        media["frames"][0].save(buf, format="JPEG", quality=85)
+        origin_result = search_origin_timeline(buf.getvalue(), filename)
+
+    # ---- Step 8: Assemble response ----
     # Build FeatureVector
     fv = FeatureVector(
         hfer=feature_dict["hfer"],
@@ -349,6 +410,18 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         analysis_level=analysis_level,
     )
 
+    # ---- Step 7: Grad-CAM heatmap (Phase 15, images only) ----
+    gradcam_b64: Optional[str] = None
+    if media_type == "image":
+        try:
+            gradcam_b64 = generate_gradcam(
+                raw_bytes,
+                filename=filename,
+                fake_probability=scoring_result["fake_probability"]
+            )
+        except Exception as e:
+            logger.warning(f"GradCAM generation failed: {e}")
+
     return AnalysisResponse(
         id=f"analysis-{media_hash[:12]}",
         media=media_info,
@@ -368,6 +441,8 @@ def run_pipeline(raw_bytes: bytes, filename: str, content_type: Optional[str] = 
         segments=segments,
         change_points=change_points,
         virality_analysis=virality_result,
+        origin_timeline=origin_result,
+        gradcam_base64=gradcam_b64,
         processing_time_ms=processing_time_ms,
         model_versions=model_versions,
     )

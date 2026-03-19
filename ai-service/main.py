@@ -9,6 +9,7 @@ import hashlib
 import logging
 import sys
 import time
+import os
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Any
@@ -21,6 +22,8 @@ from config import CORS_ORIGINS, HOST, PORT
 from schemas import AnalysisResponse, HealthResponse
 from pipeline import run_pipeline
 from logging_service import get_log_stats, get_log_entries
+from celery_app import dispatch_video_analysis, get_task_status
+from storage import query_analyses, count_analyses, get_storage_status
 
 # ---- Phase 9: In-memory fingerprint cache (LRU, max 500 entries) ----
 _CACHE_MAX = 500
@@ -129,18 +132,19 @@ async def health_check():
     """Service health check."""
     return HealthResponse(
         status="ok",
-        version="0.2.0",
+        version="0.3.0",
         models_loaded=_models_loaded,
         device=_device,
     )
 
 
-@app.post("/analyze", response_model=AnalysisResponse)
+@app.post("/analyze")
 async def analyze_media(file: UploadFile = File(...)):
     """
     Analyze uploaded media file for authenticity.
 
     Accepts: image (jpg/png/webp), video (mp4/webm), audio (wav/mp3/ogg)
+    For large files (>5MB) or long videos, processes asynchronously and returns a `task_id`.
     Returns: Full forensic analysis with feature vector, signals, and verdict
     """
     if not file.filename:
@@ -166,6 +170,22 @@ async def analyze_media(file: UploadFile = File(...)):
             logger.info(f"Cache hit for {file.filename} ({sha256[:8]}…) in {elapsed:.3f}s")
             return cached
 
+        # Phase 13: Async processing for larger files (>5MB)
+        size_mb = len(raw_bytes) / (1024 * 1024)
+        if size_mb > 5.0 or (file.content_type and "video" in file.content_type):
+            import tempfile
+            from pathlib import Path
+            
+            # Save bytes to a secure tempfile to hand off to background worker
+            fd, temp_path = tempfile.mkstemp(suffix=Path(file.filename).suffix)
+            with os.fdopen(fd, 'wb') as f:
+                f.write(raw_bytes)
+                
+            task_id = dispatch_video_analysis(temp_path, file.filename, file.content_type)
+            logger.info(f"Dispatched large task {task_id} for {file.filename} ({size_mb:.1f}MB)")
+            return JSONResponse(status_code=202, content={"task_id": task_id, "status": "PENDING"})
+
+        # Synchronous execution for small images
         result = run_pipeline(raw_bytes, file.filename, file.content_type)
         _cache_put(sha256, result)
 
@@ -181,8 +201,21 @@ async def analyze_media(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Analysis failed for {file.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.get("/task/{task_id}")
+async def check_task_status(task_id: str):
+    """Phase 13: Poll status of an asynchronous analysis task."""
+    status_dict = get_task_status(task_id)
+    
+    # If done, we want to maybe cache it
+    if status_dict["status"] == "SUCCESS" and status_dict.get("result"):
+        # We can't easily hash the bytes here as we don't have them, 
+        # so this specific run bypasses the fingerprint cache.
+        pass
+
+    return status_dict
 
 
 @app.get("/stats")

@@ -23,6 +23,7 @@ import Badge from "@/components/ui/Badge";
 import AuthenticityMeter from "@/components/ui/AuthenticityMeter";
 import RiskMeter from "@/components/ui/RiskMeter";
 import HeatmapPanel from "@/components/ui/HeatmapPanel";
+import GradCamPanel from "@/components/ui/HeatmapPanel";
 import VitalityCard from "@/components/ui/VitalityCard";
 import { mockAnalysisResult } from "@/lib/mock-data";
 import type { AnalysisResult, DetectionSignal, AMAFFeatureVector, SegmentAuthenticity } from "@/lib/types";
@@ -640,6 +641,15 @@ export default function ResultsPage() {
         {result.viralityAnalysis && (
           <div style={{ marginBottom: "24px" }}>
             <VitalityCard data={result.viralityAnalysis} />
+          </div>
+        )}
+
+        {/* Phase 15: Grad-CAM Heatmap */}
+        {result.gradcamBase64 && (
+          <div style={{ marginBottom: "24px" }}>
+            <GradCamPanel
+              gradcamBase64={result.gradcamBase64}
+            />
           </div>
         )}
 

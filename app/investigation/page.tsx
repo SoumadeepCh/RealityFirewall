@@ -15,6 +15,7 @@ import {
   BarChart3,
   Eye,
   Info,
+  Globe,
 } from "lucide-react";
 import Navbar from "@/components/ui/Navbar";
 import Card, { CardHeader } from "@/components/ui/Card";
@@ -411,6 +412,55 @@ export default function InvestigationPage() {
                       <span style={{ color: "#fbbf24", marginTop: "2px" }}>•</span> {f}
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "timeline",
+      icon: Globe,
+      iconColor: "#00bbf9",
+      label: "Origin Timeline & Tracking",
+      content: (
+        <div>
+          {!result.originTimeline && <p style={{ color: "#55556a", fontSize: "13px" }}>Origin timeline not available for this media type currently.</p>}
+          {result.originTimeline && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Top Banner */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "12px 16px", borderRadius: "8px", background: result.originTimeline.isNovel ? "rgba(255,140,66,0.07)" : "rgba(0,187,249,0.07)", border: `1px solid ${result.originTimeline.isNovel ? "rgba(255,140,66,0.2)" : "rgba(0,187,249,0.2)"}` }}>
+                {result.originTimeline.isNovel ? <AlertTriangle size={18} color="#ff8c42" style={{ marginTop: "2px" }} /> : <Globe size={18} color="#00bbf9" style={{ marginTop: "2px" }}/>}
+                <div>
+                  <h4 style={{ fontSize: "14px", fontWeight: 700, color: result.originTimeline.isNovel ? "#ff8c42" : "#00bbf9", marginBottom: "4px" }}>
+                    {result.originTimeline.isNovel ? "Novel Media Detected" : "Historical Media Match"}
+                  </h4>
+                  <p style={{ fontSize: "13px", color: "#c0c0d0", lineHeight: 1.4 }}>
+                    {result.originTimeline.notes || (result.originTimeline.isNovel ? "No previous digital footprint found. This appears to be completely original media." : `Found ${result.originTimeline.occurrences.toLocaleString()} previous matching occurrences online.`)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <p style={{ fontSize: "10px", color: "#55556a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>Earliest Appearance</p>
+                  <p style={{ fontSize: "14px", fontWeight: 700, color: "#e0e0e0" }}>{new Date(result.originTimeline.firstSeen).toLocaleDateString()}</p>
+                </div>
+                <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <p style={{ fontSize: "10px", color: "#55556a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>Total Occurrences</p>
+                  <p style={{ fontSize: "14px", fontWeight: 700, color: "#e0e0e0" }}>{result.originTimeline.occurrences.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Original URL (if found) */}
+              {!result.originTimeline.isNovel && result.originTimeline.originalUrl && (
+                <div style={{ padding: "12px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <p style={{ fontSize: "10px", color: "#55556a", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "4px" }}>Suggested Source URL</p>
+                  <a href={result.originTimeline.originalUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "13px", color: "#00bbf9", textDecoration: "none", wordBreak: "break-all", display: "flex", alignItems: "center", gap: "6px" }}>
+                    {result.originTimeline.originalUrl}
+                  </a>
                 </div>
               )}
             </div>

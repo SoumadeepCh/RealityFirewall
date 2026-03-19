@@ -25,7 +25,7 @@ DEVICE = os.getenv("RF_DEVICE", "auto")  # "auto", "cpu", "cuda"
 # Frame sampling rate for video (frames per second)
 VIDEO_FPS_SAMPLE = float(os.getenv("RF_VIDEO_FPS", "1.0"))
 # Max frames to extract from a video
-MAX_VIDEO_FRAMES = int(os.getenv("RF_MAX_FRAMES", "60"))
+MAX_VIDEO_FRAMES = int(os.getenv("RF_MAX_FRAMES", "120"))
 # Max image dimension (resize larger images)
 MAX_IMAGE_DIM = int(os.getenv("RF_MAX_IMAGE_DIM", "1024"))
 # Face detection confidence threshold

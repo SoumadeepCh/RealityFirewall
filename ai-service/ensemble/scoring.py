@@ -184,9 +184,32 @@ def apply_signal_boost(base_probability: float, signals: list[dict]) -> float:
         return base_probability
 
     signal_avg = sum(high_conf) / len(high_conf)
+    
+    # ==== PHASE 11: Adversarial Defense Mechanism ====
+    # Evasion attacks (like FGSM) often try to force the underlying CNN to output 0 
+    # by introducing severe high-frequency noise. While the CNN is blinded, our 
+    # forensic extractors (HFER/Noise) will spike and fire high-confidence signals.
+    # If the base_probability is low but we have severe anomaly signals, we boost aggressively.
+    adversarial_boost = 0.0
+    if base_probability < 0.35 and signal_avg > 0.85:
+        adversarial_boost = 0.25
+        # We also inject a pseudo-signal to explain the defensive behavior
+        signals.append({
+            "id": "adversarial-evasion-defense",
+            "name": "Adversarial Evasion Defense",
+            "category": "forensic",
+            "confidence": 0.90,
+            "description": "Extreme signal anomalies detected despite low model confidence. "
+                           "This is a common signature of adversarial evasion attacks (e.g., FGSM).",
+            "severity": "harmful",
+            "metric_value": signal_avg,
+            "source": "heuristic_defense"
+        })
+    # =================================================
+
     # Weighted blend
     boosted = (1.0 - SIGNAL_BOOST_WEIGHT) * base_probability + SIGNAL_BOOST_WEIGHT * signal_avg
-    return min(1.0, max(0.0, boosted))
+    return min(1.0, max(0.0, boosted + adversarial_boost))
 
 
 def score_analysis(

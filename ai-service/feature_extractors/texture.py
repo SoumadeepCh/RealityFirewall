@@ -5,6 +5,8 @@ Implements PDI (Patch Drift Index) for detecting compositing artifacts.
 import numpy as np
 from PIL import Image
 
+_MIN_PATCH_PX = 16   # each patch must be at least this many pixels per axis
+
 
 def compute_texture_metrics(image: Image.Image, grid_size: int = 8) -> dict:
     """
@@ -13,13 +15,20 @@ def compute_texture_metrics(image: Image.Image, grid_size: int = 8) -> dict:
 
     Args:
         image: PIL Image (RGB)
-        grid_size: Number of patches per axis (NxN grid)
+        grid_size: Desired number of patches per axis (NxN grid). Capped adaptively
+                   so each patch is at least _MIN_PATCH_PX pixels in both dimensions.
 
     Returns:
         dict with 'pdi', 'patch_scores', and diagnostic signals
     """
     arr = np.array(image.convert("RGB"), dtype=np.float64)
     h, w, _ = arr.shape
+
+    # --- Adaptive grid size ---
+    # Reduce grid so patch dimensions stay >= _MIN_PATCH_PX
+    max_grid_h = max(1, h // _MIN_PATCH_PX)
+    max_grid_w = max(1, w // _MIN_PATCH_PX)
+    grid_size = min(grid_size, max_grid_h, max_grid_w)
 
     patch_h = h // grid_size
     patch_w = w // grid_size
@@ -95,3 +104,4 @@ def compute_texture_metrics(image: Image.Image, grid_size: int = 8) -> dict:
         "patch_scores": similarities,
         "signals": signals,
     }
+

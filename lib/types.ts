@@ -67,6 +67,14 @@ export interface ViralityAnalysis {
   riskFactors: string[];
 }
 
+export interface OriginTimeline {
+  firstSeen: string; // ISO date string
+  originalUrl?: string;
+  occurrences: number;
+  isNovel: boolean;
+  notes?: string;
+}
+
 export interface AnalysisResult {
   id: string;
   media: MediaItem;
@@ -88,6 +96,10 @@ export interface AnalysisResult {
   earlyExit?: boolean;
   // Phase 6: Virality & Risk
   viralityAnalysis?: ViralityAnalysis;
+  // Phase 12: Origin Timeline
+  originTimeline?: OriginTimeline;
+  // Phase 15: Grad-CAM heatmap (base64 PNG)
+  gradcamBase64?: string;
 }
 
 

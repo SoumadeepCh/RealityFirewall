@@ -87,6 +87,15 @@ class SocietalImpact(BaseModel):
     reputation_damage_likelihood: float = Field(ge=0, le=1, default=0.0)
 
 
+class OriginTimeline(BaseModel):
+    """Phase 12: Reverse image search results."""
+    first_seen: str  # ISO-8601 date
+    original_url: Optional[str] = None
+    occurrences: int = 0
+    is_novel: bool = True
+    notes: Optional[str] = None
+
+
 class ViralityAnalysis(BaseModel):
     """Phase 6: Virality & misinformation risk assessment."""
     virality_score: float = Field(ge=0, le=100, default=0.0)
@@ -124,6 +133,12 @@ class AnalysisResponse(BaseModel):
 
     # Phase 6: Virality & risk
     virality_analysis: Optional[ViralityAnalysis] = None
+
+    # Phase 12: Origin & Timeline tracking
+    origin_timeline: Optional[OriginTimeline] = None
+
+    # Phase 15: Grad-CAM pixel heatmap (base64 PNG, images only)
+    gradcam_base64: Optional[str] = None
 
     processing_time_ms: int = 0
     model_versions: dict[str, str] = {}

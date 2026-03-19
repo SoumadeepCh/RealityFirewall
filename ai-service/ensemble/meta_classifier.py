@@ -218,7 +218,7 @@ def train_model(
         X, y = generate_synthetic_dataset(n_synthetic)
         synthetic = True
 
-    # Train/val split
+    # Train/val split — stratify ensures class ratio is preserved in both splits
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
@@ -226,19 +226,33 @@ def train_model(
     logger.info(f"Training: {X_train.shape[0]} samples, Validation: {X_val.shape[0]} samples")
     logger.info(f"Features: {FEATURE_KEYS}")
 
-    # LightGBM parameters — regularized to prevent overfit on synthetic data
+    # Auto-compute scale_pos_weight to correct for any remaining class imbalance
+    # (n_real / n_fake) — if perfectly balanced this equals 1.0
+    n_real_train = int((y_train == 0).sum())
+    n_fake_train = int((y_train == 1).sum())
+    scale_pos_weight = n_real_train / max(n_fake_train, 1)
+    logger.info(
+        f"Class balance — real: {n_real_train}, fake: {n_fake_train}, "
+        f"scale_pos_weight: {scale_pos_weight:.3f}"
+    )
+
+    # LightGBM parameters
+    # - scale_pos_weight: corrects residual class imbalance automatically
+    # - num_leaves=31: safe for real data (more complex patterns than synthetic)
+    # - 200 rounds + early stopping: real data warrants more iterations
     params = {
         "objective": "binary",
         "metric": "binary_logloss",
         "boosting_type": "gbdt",
-        "num_leaves": 15,           # reduced from 31 to limit complexity
+        "num_leaves": 31,
         "learning_rate": 0.05,
-        "feature_fraction": 0.7,
-        "bagging_fraction": 0.7,
-        "bagging_freq": 3,
-        "min_child_samples": 20,    # regularization: min samples per leaf
-        "lambda_l1": 0.1,           # L1 regularization
-        "lambda_l2": 0.1,           # L2 regularization
+        "feature_fraction": 0.8,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 5,
+        "min_child_samples": 20,
+        "lambda_l1": 0.1,
+        "lambda_l2": 0.1,
+        "scale_pos_weight": scale_pos_weight,
         "verbose": -1,
         "n_jobs": -1,
         "seed": 42,
@@ -247,12 +261,18 @@ def train_model(
     train_data = lgb.Dataset(X_train, label=y_train, feature_name=FEATURE_KEYS)
     val_data = lgb.Dataset(X_val, label=y_val, reference=train_data, feature_name=FEATURE_KEYS)
 
-    # Train — 80 rounds: enough to learn patterns, not enough to overfit synthetic data
+    callbacks = [
+        lgb.early_stopping(stopping_rounds=20, verbose=True),
+        lgb.log_evaluation(period=20),
+    ]
+
+    # Up to 200 rounds for real data; early stopping kicks in to prevent overfit
     model = lgb.train(
         params,
         train_data,
-        num_boost_round=80,
+        num_boost_round=200,
         valid_sets=[val_data],
+        callbacks=callbacks,
     )
 
 

@@ -28,12 +28,14 @@ def _denoise_image(gray: np.ndarray, strength: int = 10) -> np.ndarray:
         return uniform_filter(gray.astype(np.float64), size=5).astype(gray.dtype)
 
 
-def analyze_noise(image_array: np.ndarray) -> dict:
+def analyze_noise(image_array: np.ndarray, video_mode: bool = False) -> dict:
     """
     Extract and analyze noise residuals from an image.
 
     Args:
         image_array: NumPy array (H, W, 3) BGR or RGB uint8
+        video_mode:  When True, relax thresholds for H.264-compressed video frames
+                     to avoid elevated false-positive rates from codec noise.
 
     Returns:
         dict with noise_score, noise statistics, and signals
@@ -120,6 +122,13 @@ def analyze_noise(image_array: np.ndarray) -> dict:
             block_std_variance = 0.0
 
         # ---- Compute Noise Score (0 = likely real, 1 = likely fake) ----
+        # Thresholds are relaxed in video_mode because H.264 compression
+        # introduces structured artifacts that mimic GAN noise patterns.
+        corr_low   = 0.15 if video_mode else 0.10   # spatial autocorr below this → GAN
+        corr_med   = 0.25 if video_mode else 0.20
+        bvar_low   = 0.05 if video_mode else 0.10   # block variance below this → GAN
+        bvar_med   = 0.12 if video_mode else 0.20
+
         score = 0.0
 
         # High noise entropy → uniform noise → likely GAN
@@ -129,9 +138,9 @@ def analyze_noise(image_array: np.ndarray) -> dict:
             score += 0.10
 
         # Low spatial correlation → no sensor pattern → likely GAN
-        if spatial_corr < 0.1:
+        if spatial_corr < corr_low:
             score += 0.25
-        elif spatial_corr < 0.2:
+        elif spatial_corr < corr_med:
             score += 0.12
 
         # Abnormal noise std (too low or too high)
@@ -141,9 +150,9 @@ def analyze_noise(image_array: np.ndarray) -> dict:
             score += 0.10  # Possibly over-sharpened
 
         # Low block variance consistency → uniform noise → GAN
-        if block_std_variance < 0.1:
+        if block_std_variance < bvar_low:
             score += 0.20
-        elif block_std_variance < 0.2:
+        elif block_std_variance < bvar_med:
             score += 0.08
 
         # Non-Gaussian noise kurtosis

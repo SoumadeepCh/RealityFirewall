@@ -143,8 +143,20 @@ def preprocess_video(raw_bytes: bytes, filename: str) -> dict:
     except ImportError:
         logger.error("OpenCV not installed — cannot process video")
 
-    # Audio extraction (placeholder — full implementation in Phase 4)
+    # Audio extraction
     audio_samples = None
+    try:
+        import librosa
+        # Load audio from the same temp file before it is deleted
+        try:
+            samples, _ = librosa.load(tmp_path, sr=22050, mono=True)
+            if len(samples) > 0:
+                audio_samples = samples
+                logger.info(f"Extracted {len(samples)} audio samples from video")
+        except Exception as e:
+            logger.debug(f"Video has no audio track or extraction failed: {e}")
+    except ImportError:
+        logger.warning("librosa not installed — cannot extract audio from video")
 
     return {
         "frames": frames,

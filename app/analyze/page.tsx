@@ -15,6 +15,7 @@ import {
   Shield,
   Layers,
   Zap,
+  Loader2,
 } from "lucide-react";
 import Navbar from "@/components/ui/Navbar";
 import Card from "@/components/ui/Card";
@@ -84,6 +85,14 @@ export default function AnalyzePage() {
         const err = await response.json().catch(() => ({ detail: "Server error" }));
         throw new Error(err.detail || `Server returned ${response.status}`);
       }
+      
+      // Phase 13: Async task support
+      if (response.status === 202) {
+        const data = await response.json();
+        setAnalysisPhase("In Queue (Processing File)...");
+        pollTaskStatus(data.task_id, API_URL);
+        return; // wait for polling to finish
+      }
 
       setAnalysisPhase("Processing results...");
 
@@ -92,6 +101,44 @@ export default function AnalyzePage() {
 
       setAnalysisLevel(apiResult.analysis_level || "level2_deep_spatial");
       setAnalysisPhase("Scoring & calibrating...");
+
+      processApiResult(apiResult);
+
+    } catch (err) {
+      console.error("Analysis failed:", err);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setAnalysisPhase(`Analysis failed: ${message}`);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const pollTaskStatus = async (taskId: string, apiUrl: string) => {
+    try {
+      const res = await fetch(`${apiUrl}/task/${taskId}`);
+      if (!res.ok) throw new Error("Failed to check task status");
+
+      const data = await res.json();
+
+      if (data.status === "SUCCESS") {
+        setAnalysisPhase("Scoring & calibrating...");
+        processApiResult(data.result);
+      } else if (data.status === "FAILURE") {
+        setIsAnalyzing(false);
+        setAnalysisPhase("Background analysis task failed.");
+      } else {
+        // Pending/Processing, poll again in 2s
+        setAnalysisPhase(`In Progress: ${data.status}...`);
+        setTimeout(() => pollTaskStatus(taskId, apiUrl), 2000);
+      }
+    } catch (err) {
+      console.error("Polling failed:", err);
+      setIsAnalyzing(false);
+      setAnalysisPhase("Lost connection to the analysis server.");
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const processApiResult = (apiResult: any) => {
 
       // Map snake_case API response → camelCase frontend types
       const signals: DetectionSignal[] = (apiResult.signals || []).map(
@@ -190,12 +237,6 @@ export default function AnalyzePage() {
       setTimeout(() => {
         router.push("/results");
       }, 500);
-    } catch (err) {
-      console.error("Analysis failed:", err);
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setAnalysisPhase(`Analysis failed: ${message}`);
-      setIsAnalyzing(false);
-    }
   };
 
   const formatSize = (bytes: number) => {
@@ -396,7 +437,7 @@ export default function AnalyzePage() {
               <Button
                 onClick={handleAnalyze}
                 loading={isAnalyzing}
-                icon={<ScanEye size={18} />}
+                icon={isAnalyzing ? <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> : <ScanEye size={18} />}
                 size="lg"
                 style={{ width: "100%" }}
               >
